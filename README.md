@@ -2,6 +2,8 @@
 
 Contract reconciliation engine for MuxCore. Enables third-party modules to use their own contract repos while preserving Go nominal type safety.
 
+Library only — import `github.com/Muxcore-Media/contracts-reconciler/reconciler`. There is no CLI binary in this repo.
+
 ## What it does
 
 When a module declares it implements `MediaLibrary` from `github.com/some-dev/contracts-media`, the reconciler:
@@ -36,14 +38,7 @@ directive, err := r.Resolve(reconciler.Declaration{
 reconciler.ApplyReplaceDirectives(".", []reconciler.ReplaceDirective{*directive})
 ```
 
-## CLI
-
-```bash
-go run ./cmd/reconciler check \
-  --repo github.com/some-dev/contracts-media \
-  --version v1.2.0 \
-  --interface MediaLibrary
-```
+Set `Resolver.CacheDir` to reuse cloned contract repos across invocations; otherwise clones go under the system temp directory.
 
 ## API
 
@@ -51,7 +46,13 @@ go run ./cmd/reconciler check \
 |----------|-------------|
 | `Resolver.Resolve(Declaration)` | Check a declaration, return replace directive if compatible |
 | `Resolver.ResolveAll([]Declaration)` | Batch process, return directives + errors |
-| `ApplyReplaceDirectives(dir, []ReplaceDirective)` | Run `go mod edit -replace` for each |
+| `ApplyReplaceDirectives(workdir, []ReplaceDirective)` | Run `go mod edit -replace` for each |
+| `GenerateReplaceBlock([]ReplaceDirective)` | Format replace directives as a go.mod block |
 | `DryRun([]Declaration)` | Preview without modifying files |
 | `ParseDir(dir)` | Extract all exported interface specs from a Go package |
+| `ParseFile(path)` | Extract exported interface specs from one `.go` file |
+| `FindInterface(specs, name)` | Look up an interface by name in parsed specs |
+| `ParseGoModFile(path)` | Parse `require` directives from a go.mod |
+| `ParseReplaceDirective(line)` | Parse a replace directive line |
 | `Canonical(name)` | Look up canonical repo for an interface name |
+| `RegisteredCanonicals()` | All known canonical contract entries |
