@@ -1,0 +1,7 @@
+{
+  "name": "Contracts Reconciler",
+  "description": "Contract reconciliation library for MuxCore — structural interface matching and canonical replace directives; not a runnable module.",
+  "version": "0.1.0",
+  "author": "MuxCore",
+  "type": "contracts"
+}
