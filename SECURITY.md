@@ -1,10 +1,5 @@
 # Security Policy
 
-## Status
-
-MuxCore is **pre-1.0 alpha software**. The security features described below are
-a mix of implemented, in-progress, and planned. This document distinguishes them clearly.
-
 ## Supported Versions
 
 | Version | Supported          |
@@ -14,59 +9,29 @@ a mix of implemented, in-progress, and planned. This document distinguishes them
 
 ## Reporting a Vulnerability
 
-**Do not open a public issue.** Report via GitHub Security Advisories:
-https://github.com/Muxcore-Media/core/security/advisories
+**Do not open a public issue.** Report via GitHub Security Advisories for this repository:
+
+https://github.com/Muxcore-Media/contracts-reconciler/security/advisories
 
 Acknowledgment within **72 hours**. Target patch: **7 days** critical, **30 days** moderate.
 
 ## Scope
 
-### Implemented
+This repository is a **Go library** (`github.com/Muxcore-Media/contracts-reconciler/reconciler`). It is not MuxCore core: there is no HTTP API, gRPC mesh, RBAC, Docker image, or runtime daemon here.
 
-- **HTTP API**: Pluggable auth middleware (bearer token), rate limiting, audit logging, security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy)
-- **gRPC mesh**: TLS encryption (required in production), mTLS with CA verification (when configured)
-- **Cluster discovery**: Join token authentication via gRPC metadata
-- **Storage**: Key sanitization (path traversal prevention), max object size enforcement (100MB)
-- **Event bus**: Per-handler timeouts (30s), structured logging, source node validation
-- **Config**: Environment variable overrides with validation, seed node address validation
-- **Docker**: Non-root user, credential file exclusion from builds, HEALTHCHECK; read-only root filesystem and capability dropping applied via docker-compose.yml
-- **CI/CD**: Read-only GITHUB_TOKEN, actions pinned by commit SHA, verified binary downloads with SHA256 checksums, govulncheck at pinned version, fuzz testing
+Security-relevant behavior is limited to what consumers invoke when reconciling contract modules:
 
-### In Progress
+- **`go.mod replace`**: `ApplyReplaceDirectives` runs `go mod edit -replace`. A forged or mismatched replace can redirect a build to an attacker-controlled module path. Callers must treat replace output as trusted only after a successful structural interface match (or after explicit human review of dry-run output).
+- **Cache directory**: `Resolver.CacheDir` (or the process temp dir) holds cloned contract repos. A writable shared cache can be poisoned with unexpected source; isolate `CacheDir` per job/user and do not reuse untrusted cache trees.
+- **Git clone of declared repos**: `Resolve` / `CloneAndParse` clone third-party and canonical contract repositories by import path and version. Supplying untrusted `Declaration.Repo` / URLs can cause network fetches of malicious trees or unexpected local filesystem layout under the cache. Only reconcile declarations from trusted catalogs (e.g. spool/marketplace metadata you already accept).
 
-- **RBAC enforcement**: Authorizer interface is defined but enforcement is only wired at the HTTP API layer. gRPC endpoints and event bus dispatch do not perform authorization checks — any authenticated connection can invoke any gRPC method or publish any event.
-- **Cluster join authentication**: Token required; mTLS CA verification available; cross-node routing not yet implemented
-- **Auth failure rate limiting**: Per-IP brute-force protection with fixed 1-minute backoff after 5 failures
-
-### Planned (Not Yet Implemented)
-
-- **Module capability enforcement**: Capabilities are declared but not runtime-enforced. Capability checks in event dispatch, mesh routing, and storage access are planned.
-- **Module sandboxing** (gVisor): Not implemented — modules run in-process with no isolation.
-- **OIDC / SSO**: No implementation exists yet.
-- **Event authorization**: No per-event-type access control.
-- **gRPC interceptors**: Auth, rate limiting, and logging not yet wired as gRPC interceptors.
-
-## Security Model
-
-MuxCore's intended security boundary is **between modules, not inside them**.
-Core provides the fabric — event bus, registry, lifecycle — and each module should
-run with the capabilities it declared. A module that declares only
-`downloader.torrent` should not be able to read the filesystem or call the
-notification system.
-
-**Current state (2026-05-26)**: Module capabilities are self-declared and not
-enforced at runtime. The boundaries described above are the design target, not
-the current reality. Capability enforcement is planned for a future release.
-
-When reporting vulnerabilities, frame issues against both the intended and
-actual boundaries. A bug in a module's business logic that stays within its
-own capabilities is a regular bug, not a security vulnerability.
+Out of scope for this repo: MuxCore HTTP/gRPC transport security, cluster join tokens, module capability enforcement, and container hardening — report those against [Muxcore-Media/core](https://github.com/Muxcore-Media/core/security/advisories).
 
 ## Disclosure Policy
 
 1. Reporter submits private report
 2. Maintainers triage within 72 hours, assign severity
-3. Fix developed in private fork; reporter credited (with permission)
+3. Fix developed privately; reporter credited (with permission)
 4. GitHub Security Advisory published with fix release
 5. CVE requested for critical vulnerabilities
 
@@ -75,13 +40,7 @@ We follow **coordinated disclosure**. Default window: 30 days before public disc
 ## Safe Harbor
 
 We will not pursue legal action against researchers who:
-- Test against their own MuxCore instance
+- Test against their own systems and clones
 - Avoid accessing or modifying data that does not belong to them
 - Make a good-faith effort to avoid degradation of service during testing
 - Follow this policy's reporting and disclosure process
-
-## Recognition
-
-| Name | Issue | Date |
-| ---- | ----- | ---- |
-| ---  | ---   | ---  |
