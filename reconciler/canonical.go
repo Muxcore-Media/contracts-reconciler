@@ -11,27 +11,35 @@ package reconciler
 // Interface names must be unique across all contract repos. If two contract
 // repos define different interfaces with the same name, one must be renamed.
 var canonicalRegistry = map[string]CanonicalRepo{
-	// contracts-media
-	"MediaLibrary": {
-		ImportPath: "github.com/Muxcore-Media/contracts-media",
-		Version:    "v1.0.0",
+	// contracts-media-admin (published)
+	"MediaAdminService": {
+		ImportPath: "github.com/Muxcore-Media/contracts-media-admin",
+		Version:    "v0.1.0",
 	},
 
-	// contracts-downloader
+	// contracts-downloader (published)
 	"Downloader": {
 		ImportPath: "github.com/Muxcore-Media/contracts-downloader",
-		Version:    "v1.0.0",
+		Version:    "v0.1.0",
 	},
-	"DownloadRouter": {
+	"DownloaderService": {
 		ImportPath: "github.com/Muxcore-Media/contracts-downloader",
-		Version:    "v1.0.0",
+		Version:    "v0.1.0",
 	},
 
-	// contracts-indexer
+	// contracts-indexer (published)
 	"Indexer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-indexer",
-		Version:    "v1.0.0",
+		Version:    "v0.1.0",
 	},
+
+	// contracts-notification (published)
+	"NotificationProvider": {
+		ImportPath: "github.com/Muxcore-Media/contracts-notification",
+		Version:    "v0.1.0",
+	},
+
+	// Reserved — repos not published yet (see core.wiki/Spool-and-Marketplace.md)
 
 	// contracts-playback
 	"Playback": {
@@ -88,12 +96,6 @@ var canonicalRegistry = map[string]CanonicalRepo{
 	// contracts-resolver
 	"MediaResolver": {
 		ImportPath: "github.com/Muxcore-Media/contracts-resolver",
-		Version:    "v1.0.0",
-	},
-
-	// contracts-notification
-	"NotificationProvider": {
-		ImportPath: "github.com/Muxcore-Media/contracts-notification",
 		Version:    "v1.0.0",
 	},
 

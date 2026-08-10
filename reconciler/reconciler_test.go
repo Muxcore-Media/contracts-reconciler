@@ -203,8 +203,8 @@ func TestParseGoMod(t *testing.T) {
 go 1.23
 
 require (
-    github.com/Muxcore-Media/contracts-media v1.0.0
-    github.com/some-dev/contracts-media v1.2.0
+    github.com/Muxcore-Media/contracts-media-admin v0.1.0
+    github.com/some-dev/contracts-media-admin v1.2.0
 )
 
 require golang.org/x/mod v0.22.0
@@ -218,7 +218,7 @@ require golang.org/x/mod v0.22.0
 	}
 	found := false
 	for _, r := range reqs {
-		if r.Path == "github.com/some-dev/contracts-media" && r.Version == "v1.2.0" {
+		if r.Path == "github.com/some-dev/contracts-media-admin" && r.Version == "v1.2.0" {
 			found = true
 		}
 	}
@@ -239,18 +239,18 @@ func TestCanonicalRegistry(t *testing.T) {
 	}
 
 	// Common interfaces must exist
-	for _, name := range []string{"MediaLibrary", "Downloader", "Indexer", "MetadataProvider"} {
+	for _, name := range []string{"MediaAdminService", "Downloader", "Indexer", "NotificationProvider"} {
 		if cr := Canonical(name); cr == nil {
 			t.Errorf("Canonical(%q) returned nil — interface must be registered", name)
 		}
 	}
 }
 
-func TestParseDir_MediaContracts(t *testing.T) {
-	// Test parsing the actual contracts-media repo
-	repoDir := "/opt/repos/contracts-media"
+func TestParseDir_MediaAdminContracts(t *testing.T) {
+	// Test parsing the actual contracts-media-admin repo
+	repoDir := "/opt/repos/contracts-media-admin"
 	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
-		t.Skip("contracts-media not cloned — skipping integration test")
+		t.Skip("contracts-media-admin not cloned — skipping integration test")
 	}
 
 	specs, err := ParseDir(repoDir)
@@ -258,22 +258,22 @@ func TestParseDir_MediaContracts(t *testing.T) {
 		t.Fatalf("ParseDir(%s): %v", repoDir, err)
 	}
 
-	// contracts-media should have MediaLibrary
+	// contracts-media-admin should have MediaAdminServiceServer
 	found := false
 	for _, s := range specs {
-		if s.Name == "MediaLibrary" {
+		if s.Name == "MediaAdminServiceServer" {
 			found = true
 			if len(s.Methods) == 0 {
-				t.Error("MediaLibrary has no methods — check parser")
+				t.Error("MediaAdminServiceServer has no methods — check parser")
 			}
-			t.Logf("MediaLibrary methods: %d", len(s.Methods))
+			t.Logf("MediaAdminServiceServer methods: %d", len(s.Methods))
 			for _, m := range s.Methods {
 				t.Logf("  %s", methodSig(m))
 			}
 		}
 	}
 	if !found {
-		t.Error("MediaLibrary interface not found in contracts-media")
+		t.Error("MediaAdminServiceServer interface not found in contracts-media-admin")
 	}
 }
 
@@ -302,7 +302,7 @@ func TestParseDir_ContentContracts(t *testing.T) {
 
 func TestDryRun(t *testing.T) {
 	report, err := DryRun([]Declaration{
-		{Repo: "github.com/Muxcore-Media/contracts-media", Version: "v1.0.0", Interface: "MediaLibrary"},
+		{Repo: "github.com/Muxcore-Media/contracts-media-admin", Version: "v0.1.0", Interface: "MediaAdminService"},
 	})
 	if err != nil {
 		t.Fatalf("DryRun: %v", err)
@@ -314,12 +314,12 @@ func TestDryRun(t *testing.T) {
 
 func TestReplaceDirectiveString(t *testing.T) {
 	d := ReplaceDirective{
-		OldPath: "github.com/thirdparty/contracts-media",
-		NewPath: "github.com/Muxcore-Media/contracts-media",
-		Version: "v1.0.0",
+		OldPath: "github.com/thirdparty/contracts-media-admin",
+		NewPath: "github.com/Muxcore-Media/contracts-media-admin",
+		Version: "v0.1.0",
 	}
 	got := d.String()
-	want := "github.com/thirdparty/contracts-media => github.com/Muxcore-Media/contracts-media v1.0.0"
+	want := "github.com/thirdparty/contracts-media-admin => github.com/Muxcore-Media/contracts-media-admin v0.1.0"
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
 	}
@@ -353,9 +353,9 @@ func TestGenerateReplaceBlockEmpty(t *testing.T) {
 func TestResolve_AlreadyCanonical(t *testing.T) {
 	r := &Resolver{}
 	directive, err := r.Resolve(Declaration{
-		Repo:      "github.com/Muxcore-Media/contracts-media",
-		Version:   "v1.0.0",
-		Interface: "MediaLibrary",
+		Repo:      "github.com/Muxcore-Media/contracts-media-admin",
+		Version:   "v0.1.0",
+		Interface: "MediaAdminService",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
