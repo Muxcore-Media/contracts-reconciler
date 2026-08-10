@@ -1,9 +1,9 @@
 // Package reconciler provides structural contract matching and go.mod replace
 // directive generation for MuxCore third-party module imports.
 //
-// When a module declares it implements "MediaLibrary" from
-// "github.com/some-dev/contracts-media", the reconciler fetches both that repo
-// and the canonical "github.com/Muxcore-Media/contracts-media", extracts the
+// When a module declares it implements "MediaAdminService" from
+// "github.com/some-dev/contracts-media-admin", the reconciler fetches both that repo
+// and the canonical "github.com/Muxcore-Media/contracts-media-admin", extracts the
 // Go interface definitions via AST parsing, compares method signatures, and
 // — if structurally compatible — generates a go.mod replace directive that
 // normalizes the import to the canonical path.
@@ -20,16 +20,16 @@ import (
 // Declaration describes a contract a module claims to implement.
 // This is what appears in a module's muxcore.json or ContractDeclaration list.
 type Declaration struct {
-	Repo      string // Go module path (e.g. "github.com/some-dev/contracts-media")
+	Repo      string // Go module path (e.g. "github.com/some-dev/contracts-media-admin")
 	Version   string // semantic version tag (e.g. "v1.2.0")
-	Interface string // Go interface name (e.g. "MediaLibrary")
+	Interface string // Go interface name (e.g. "MediaAdminService")
 }
 
 // CanonicalRepo maps an interface name to its canonical Go module path.
 // The reconciler uses this to know which Muxcore-Media contract repo is the
 // authority for a given interface.
 type CanonicalRepo struct {
-	ImportPath string // Go module import path (e.g. "github.com/Muxcore-Media/contracts-media")
+	ImportPath string // Go module import path (e.g. "github.com/Muxcore-Media/contracts-media-admin")
 	Version    string // latest known version (e.g. "v1.0.0")
 }
 
@@ -86,7 +86,7 @@ type MethodSpec struct {
 type TypeSpec struct {
 	Kind       string     // "ident", "selector", "star", "array", "slice", "map", "interface", "chan", "func", "struct"
 	Name       string     // package-local name (e.g. "MediaObject", "MediaFilter")
-	ImportPath string     // for selectors: the package import path (e.g. "github.com/Muxcore-Media/contracts-media")
+	ImportPath string     // for selectors: the package import path (e.g. "github.com/Muxcore-Media/contracts-media-admin")
 	Elem       *TypeSpec  // element type for pointers, slices, arrays
 	Key        *TypeSpec  // key type for maps
 	Params     []TypeSpec // for func types
