@@ -59,6 +59,18 @@ var canonicalRegistry = map[string]CanonicalRepo{
 		Version:    "v1.0.0",
 	},
 
+	// contracts-scanner
+	"ScannerService": {
+		ImportPath: "github.com/Muxcore-Media/contracts-scanner",
+		Version:    "v0.1.0",
+	},
+
+	// contracts-automation
+	"AutomationService": {
+		ImportPath: "github.com/Muxcore-Media/contracts-automation",
+		Version:    "v0.1.0",
+	},
+
 	// contracts-artwork
 	"ArtworkProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-artwork",
