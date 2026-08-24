@@ -56,7 +56,7 @@ var canonicalRegistry = map[string]CanonicalRepo{
 	// contracts-metadata
 	"MetadataProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-metadata",
-		Version:    "v1.0.0",
+		Version:    "v0.1.0",
 	},
 
 	// contracts-scanner
