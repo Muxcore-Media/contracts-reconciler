@@ -1,6 +1,7 @@
 package reconciler
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -59,7 +60,7 @@ func (r *Resolver) Resolve(decl Declaration) (*ReplaceDirective, error) {
 	// Structural comparison
 	if !canonSpec.Equal(*thirdSpec) {
 		diff := diffSpecs(*canonSpec, *thirdSpec)
-		return nil, fmt.Errorf("interface mismatch for %s:\n%s\nDeclared by %s does not match canonical %s.\nUse type aliases (type X = canonical.X) or match the method signatures exactly.", decl.Interface, diff, decl.Repo, canon.ImportPath)
+		return nil, fmt.Errorf("interface mismatch for %s:\n%s\nDeclared by %s does not match canonical %s\nUse type aliases (type X = canonical.X) or match the method signatures exactly", decl.Interface, diff, decl.Repo, canon.ImportPath)
 	}
 
 	return &ReplaceDirective{
@@ -135,18 +136,18 @@ func (r *Resolver) cloneRepo(importPath, version string) (string, error) {
 	}
 	args = append(args, repoURL, tmpDir)
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:noctx // offline git clone without request cancellation
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("git clone %s: %s (%w)", repoURL, string(out), err)
 	}
 
 	// Move to cache on success
-	os.MkdirAll(filepath.Dir(cacheKey), 0755)
+	_ = os.MkdirAll(filepath.Dir(cacheKey), 0o750)
 	if err := os.Rename(tmpDir, cacheKey); err != nil {
 		// Rename failed (cross-device?), use tmpDir directly
-		return tmpDir, nil
+		return tmpDir, nil //nolint:nilerr // intentional fallback when cache rename is unavailable
 	}
 
 	return cacheKey, nil
@@ -176,9 +177,11 @@ func diffSpecs(canon, third InterfaceSpec) string {
 			continue
 		}
 		if !cm.equalTypes(m) {
-			lines = append(lines, fmt.Sprintf("  ~ %s", m.Name))
-			lines = append(lines, fmt.Sprintf("      canonical: %s", methodSig(cm)))
-			lines = append(lines, fmt.Sprintf("      declared:  %s", methodSig(m)))
+			lines = append(lines,
+				fmt.Sprintf("  ~ %s", m.Name),
+				fmt.Sprintf("      canonical: %s", methodSig(cm)),
+				fmt.Sprintf("      declared:  %s", methodSig(m)),
+			)
 		}
 		delete(canonMethods, m.Name)
 	}
