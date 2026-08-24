@@ -27,7 +27,7 @@ func ApplyReplaceDirectives(workdir string, directives []ReplaceDirective) error
 		replace := d.String()
 		args := []string{"mod", "edit", "-replace", replace}
 
-		cmd := exec.CommandContext(context.Background(), "go", args...) //nolint:noctx,gosec // controlled go mod edit args
+		cmd := exec.CommandContext(context.Background(), "go", args...) //nolint:gosec // controlled go mod edit args
 		cmd.Dir = workdir
 		out, err := cmd.CombinedOutput()
 		if err != nil {

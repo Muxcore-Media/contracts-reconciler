@@ -136,7 +136,7 @@ func (r *Resolver) cloneRepo(importPath, version string) (string, error) {
 	}
 	args = append(args, repoURL, tmpDir)
 
-	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:noctx // offline git clone without request cancellation
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
