@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -14,6 +13,7 @@ import (
 // definitions. Non-Go files and test files are skipped.
 func ParseDir(dir string) ([]InterfaceSpec, error) {
 	fset := token.NewFileSet()
+	//nolint:staticcheck // ParseDir is enough for structural interface extraction without build tags.
 	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go") && strings.HasSuffix(fi.Name(), ".go")
 	}, parser.ParseComments)
@@ -26,7 +26,7 @@ func ParseDir(dir string) ([]InterfaceSpec, error) {
 	}
 
 	// Use the first package found (there should only be one package per dir)
-	var pkg *ast.Package
+	var pkg *ast.Package //nolint:staticcheck // structural parsing only; no type checking required
 	for _, p := range pkgs {
 		pkg = p
 		break
@@ -152,7 +152,7 @@ func extractFieldList(fieldList *ast.FieldList) []TypeSpec {
 	return types
 }
 
-func extractType(expr ast.Expr) TypeSpec {
+func extractType(expr ast.Expr) TypeSpec { //nolint:gocyclo // AST type shapes require exhaustive switch coverage
 	switch t := expr.(type) {
 	case *ast.Ident:
 		if t.Name == "error" || t.Name == "bool" || t.Name == "string" ||
@@ -250,7 +250,7 @@ func CloneAndParse(repoURL, version string) ([]InterfaceSpec, func(), error) {
 		return nil, nil, fmt.Errorf("create temp dir: %w", err)
 	}
 
-	cleanup := func() { os.RemoveAll(dir) }
+	cleanup := func() { _ = os.RemoveAll(dir) }
 
 	// Build the clone URL with the version tag
 	cloneURL := repoURL
@@ -264,9 +264,9 @@ func CloneAndParse(repoURL, version string) ([]InterfaceSpec, func(), error) {
 	}
 
 	// Clone the repo
-	if err := cloneRepo(cloneURL, version, dir); err != nil {
+	if cloneErr := cloneRepo(cloneURL, version, dir); cloneErr != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("clone %s: %w", repoURL, err)
+		return nil, nil, fmt.Errorf("clone %s: %w", repoURL, cloneErr)
 	}
 
 	specs, err := ParseDir(dir)
@@ -289,7 +289,7 @@ func cloneRepo(url, version, destDir string) error {
 
 // ParseGoModFile parses a go.mod file and returns all require directives.
 func ParseGoModFile(modPath string) ([]ModRequire, error) {
-	data, err := os.ReadFile(modPath)
+	data, err := os.ReadFile(modPath) //nolint:gosec // modPath supplied by caller for explicit go.mod parsing
 	if err != nil {
 		return nil, fmt.Errorf("read go.mod: %w", err)
 	}
@@ -339,6 +339,3 @@ func parseGoMod(content string) ([]ModRequire, error) {
 	}
 	return reqs, nil
 }
-
-// writeToFile is a test helper.
-var writeToFile = filepath.Walk // unused; placeholder for test support

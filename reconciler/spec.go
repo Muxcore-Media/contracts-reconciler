@@ -152,7 +152,7 @@ func (m MethodSpec) equalTypes(other MethodSpec) bool {
 
 // Equal checks structural type equality, ignoring package paths.
 // Two types from different packages that resolve to the same shape are equal.
-func (t TypeSpec) Equal(other TypeSpec) bool {
+func (t TypeSpec) Equal(other TypeSpec) bool { //nolint:gocyclo // structural type equality mirrors Go type grammar
 	if t.Kind != other.Kind {
 		return false
 	}
