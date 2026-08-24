@@ -1,6 +1,7 @@
 package reconciler
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,7 @@ func ApplyReplaceDirectives(workdir string, directives []ReplaceDirective) error
 		replace := d.String()
 		args := []string{"mod", "edit", "-replace", replace}
 
-		cmd := exec.Command("go", args...)
+		cmd := exec.CommandContext(context.Background(), "go", args...) //nolint:noctx,gosec // controlled go mod edit args
 		cmd.Dir = workdir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -66,7 +67,7 @@ func DryRun(declarations []Declaration) (string, error) {
 	if len(errs) > 0 {
 		out.WriteString("ERRORS:\n")
 		for _, err := range errs {
-			out.WriteString(fmt.Sprintf("  %s\n", err))
+			fmt.Fprintf(&out, "  %s\n", err)
 		}
 		out.WriteString("\n")
 	}
@@ -82,7 +83,7 @@ func DryRun(declarations []Declaration) (string, error) {
 
 	out.WriteString("SUMMARY:\n")
 	for _, d := range directives {
-		out.WriteString(fmt.Sprintf("  %s → %s %s\n", d.OldPath, d.NewPath, d.Version))
+		fmt.Fprintf(&out, "  %s → %s %s\n", d.OldPath, d.NewPath, d.Version)
 	}
 
 	return out.String(), nil
