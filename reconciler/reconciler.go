@@ -15,6 +15,9 @@ type Resolver struct {
 	// CacheDir is where cloned contract repos are stored. Defaults to a
 	// temp directory. Set this if you want to cache across invocations.
 	CacheDir string
+
+	// AllowedHosts restricts git clone targets. Defaults to github.com.
+	AllowedHosts []string
 }
 
 // Resolve checks whether a module's contract declaration is compatible with
@@ -23,6 +26,7 @@ type Resolver struct {
 // It returns (nil, nil) when:
 //   - The declaration already uses the canonical repo (no work needed)
 //   - No canonical equivalent exists for this interface (not a MuxCore contract)
+//   - The interface is reserved (unpublished / events-only surface)
 //
 // It returns a ReplaceDirective when:
 //   - The declaration uses a non-canonical repo
@@ -33,40 +37,52 @@ type Resolver struct {
 //   - The interfaces are structurally different (mismatch report)
 //   - Either repo can't be fetched or parsed
 func (r *Resolver) Resolve(decl Declaration) (*ReplaceDirective, error) {
-	// Check if this is already a canonical declaration
+	if err := r.validateRepoImportPath(decl.Repo); err != nil {
+		return nil, fmt.Errorf("third-party repo: %w", err)
+	}
+
 	canon := Canonical(decl.Interface)
 	if canon == nil {
-		// Unknown interface — not a MuxCore contract, nothing to reconcile
+		return nil, nil
+	}
+	if canon.Reserved {
 		return nil, nil
 	}
 
 	if decl.Repo == canon.ImportPath {
-		// Already using the canonical repo, no replace needed
 		return nil, nil
 	}
 
-	// Fetch and parse the canonical interface
-	canonSpec, err := r.fetchAndParse(canon.ImportPath, canon.Version, decl.Interface)
+	canonVersion := resolveCompareVersion(decl, *canon)
+
+	canonSpec, err := r.fetchAndParse(canon.ImportPath, canonVersion, decl.Interface)
 	if err != nil {
 		return nil, fmt.Errorf("canonical %s: %w", decl.Interface, err)
 	}
 
-	// Fetch and parse the third-party interface
-	thirdSpec, err := r.fetchAndParse(decl.Repo, decl.Version, decl.Interface)
+	thirdVersion := decl.Version
+	if thirdVersion == "" {
+		thirdVersion = canonVersion
+	}
+	thirdSpec, err := r.fetchAndParse(decl.Repo, thirdVersion, decl.Interface)
 	if err != nil {
 		return nil, fmt.Errorf("third-party %s from %s: %w", decl.Interface, decl.Repo, err)
 	}
 
-	// Structural comparison
 	if !canonSpec.Equal(*thirdSpec) {
 		diff := diffSpecs(*canonSpec, *thirdSpec)
 		return nil, fmt.Errorf("interface mismatch for %s:\n%s\nDeclared by %s does not match canonical %s\nUse type aliases (type X = canonical.X) or match the method signatures exactly", decl.Interface, diff, decl.Repo, canon.ImportPath)
 	}
 
+	pinVersion := canonVersion
+	if pinVersion == "" {
+		pinVersion = decl.Version
+	}
+
 	return &ReplaceDirective{
 		OldPath: decl.Repo,
 		NewPath: canon.ImportPath,
-		Version: canon.Version,
+		Version: pinVersion,
 	}, nil
 }
 
@@ -90,6 +106,16 @@ func (r *Resolver) ResolveAll(decls []Declaration) ([]ReplaceDirective, []error)
 	return directives, errs
 }
 
+func resolveCompareVersion(decl Declaration, canon CanonicalRepo) string {
+	if decl.CanonicalVersion != "" {
+		return decl.CanonicalVersion
+	}
+	if decl.Version != "" {
+		return decl.Version
+	}
+	return canon.Version
+}
+
 func (r *Resolver) fetchAndParse(importPath, version, interfaceName string) (*InterfaceSpec, error) {
 	dir, err := r.cloneRepo(importPath, version)
 	if err != nil {
@@ -101,30 +127,43 @@ func (r *Resolver) fetchAndParse(importPath, version, interfaceName string) (*In
 		return nil, fmt.Errorf("%s: %w", importPath, err)
 	}
 
-	// Override the package path with the actual import path
 	spec.PackagePath = importPath
 	return spec, nil
 }
 
+func (r *Resolver) validateRepoImportPath(importPath string) error {
+	return validateImportPath(importPath, r.allowedHosts())
+}
+
+func (r *Resolver) allowedHosts() []string {
+	if len(r.AllowedHosts) > 0 {
+		return r.AllowedHosts
+	}
+	return defaultAllowedHosts
+}
+
 func (r *Resolver) cloneRepo(importPath, version string) (string, error) {
+	if err := r.validateRepoImportPath(importPath); err != nil {
+		return "", err
+	}
+
 	cacheDir := r.CacheDir
 	if cacheDir == "" {
 		cacheDir = os.TempDir()
 	}
 
-	// Build a cache key from import path + version
 	safePath := strings.NewReplacer("/", "-", ".", "-").Replace(importPath)
 	cacheKey := filepath.Join(cacheDir, "contracts-reconciler-cache", safePath+"-"+version)
 
-	// Check cache
 	if info, err := os.Stat(cacheKey); err == nil && info.IsDir() {
 		return cacheKey, nil
 	}
 
-	// Convert import path to repo URL
-	repoURL := importPathToRepoURL(importPath)
+	repoURL, err := importPathToRepoURL(importPath)
+	if err != nil {
+		return "", err
+	}
 
-	// Clone
 	tmpDir, err := os.MkdirTemp(cacheDir, "reconciler-clone-*")
 	if err != nil {
 		return "", fmt.Errorf("temp dir: %w", err)
@@ -143,23 +182,12 @@ func (r *Resolver) cloneRepo(importPath, version string) (string, error) {
 		return "", fmt.Errorf("git clone %s: %s (%w)", repoURL, string(out), err)
 	}
 
-	// Move to cache on success
 	_ = os.MkdirAll(filepath.Dir(cacheKey), 0o750)
 	if err := os.Rename(tmpDir, cacheKey); err != nil {
-		// Rename failed (cross-device?), use tmpDir directly
 		return tmpDir, nil //nolint:nilerr // intentional fallback when cache rename is unavailable
 	}
 
 	return cacheKey, nil
-}
-
-func importPathToRepoURL(importPath string) string {
-	parts := strings.Split(importPath, "/")
-	if len(parts) < 3 {
-		return "https://" + importPath
-	}
-	// github.com/owner/repo → https://github.com/owner/repo
-	return "https://" + strings.Join(parts[:3], "/")
 }
 
 func diffSpecs(canon, third InterfaceSpec) string {

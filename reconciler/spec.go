@@ -20,9 +20,10 @@ import (
 // Declaration describes a contract a module claims to implement.
 // This is what appears in a module's muxcore.json or ContractDeclaration list.
 type Declaration struct {
-	Repo      string // Go module path (e.g. "github.com/some-dev/contracts-media-admin")
-	Version   string // semantic version tag (e.g. "v1.2.0")
-	Interface string // Go interface name (e.g. "MediaAdminService")
+	Repo             string // Go module path (e.g. "github.com/some-dev/contracts-media-admin")
+	Version          string // semantic version tag (e.g. "v1.2.0")
+	CanonicalVersion string // optional canonical tag override for comparison/pinning
+	Interface        string // Go interface name (e.g. "MediaAdminServiceServer")
 }
 
 // CanonicalRepo maps an interface name to its canonical Go module path.
@@ -30,7 +31,8 @@ type Declaration struct {
 // authority for a given interface.
 type CanonicalRepo struct {
 	ImportPath string // Go module import path (e.g. "github.com/Muxcore-Media/contracts-media-admin")
-	Version    string // latest known version (e.g. "v1.0.0")
+	Version    string // default clone tag when Declaration.Version is empty
+	Reserved   bool   // unpublished or events-only — Resolve skips without cloning
 }
 
 // ReplaceDirective represents a single go.mod replace directive.
@@ -40,12 +42,20 @@ type ReplaceDirective struct {
 	Version string // version to pin (e.g. "v1.0.0")
 }
 
-// String formats the directive as a go.mod replace line.
+// String formats the directive as a human-readable go.mod replace line.
 func (d ReplaceDirective) String() string {
 	if d.Version != "" {
 		return fmt.Sprintf("%s => %s %s", d.OldPath, d.NewPath, d.Version)
 	}
 	return fmt.Sprintf("%s => %s", d.OldPath, d.NewPath)
+}
+
+// ModEditArg formats the directive for `go mod edit -replace=...`.
+func (d ReplaceDirective) ModEditArg() string {
+	if d.Version != "" {
+		return fmt.Sprintf("%s=%s@%s", d.OldPath, d.NewPath, d.Version)
+	}
+	return fmt.Sprintf("%s=%s", d.OldPath, d.NewPath)
 }
 
 // ParseReplaceDirective parses a "go mod edit -replace" output line.
