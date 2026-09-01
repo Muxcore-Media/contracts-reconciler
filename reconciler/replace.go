@@ -1,7 +1,6 @@
 package reconciler
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,14 +23,14 @@ func ApplyReplaceDirectives(workdir string, directives []ReplaceDirective) error
 	}
 
 	for _, d := range directives {
-		replace := d.String()
-		args := []string{"mod", "edit", "-replace", replace}
+		replace := d.ModEditArg()
+		args := []string{"mod", "edit", "-replace=" + replace}
 
-		cmd := exec.CommandContext(context.Background(), "go", args...) //nolint:gosec // controlled go mod edit args
+		cmd := exec.Command("go", args...) //nolint:gosec // controlled go mod edit args
 		cmd.Dir = workdir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("go mod edit -replace %s: %s (%w)", replace, string(out), err)
+			return fmt.Errorf("go mod edit -replace=%s: %s (%w)", replace, string(out), err)
 		}
 	}
 
@@ -56,9 +55,11 @@ func GenerateReplaceBlock(directives []ReplaceDirective) string {
 }
 
 // DryRun returns a human-readable report of what would be changed without
-// modifying any files.
-func DryRun(declarations []Declaration) (string, error) {
-	r := &Resolver{}
+// modifying any files. Pass a non-nil Resolver to reuse CacheDir or fixture caches.
+func DryRun(r *Resolver, declarations []Declaration) (string, error) {
+	if r == nil {
+		r = &Resolver{}
+	}
 	directives, errs := r.ResolveAll(declarations)
 
 	var out strings.Builder

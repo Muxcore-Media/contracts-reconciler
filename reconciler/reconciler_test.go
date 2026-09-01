@@ -2,10 +2,15 @@ package reconciler
 
 import (
 	"os"
-
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func testdataPath(t *testing.T, parts ...string) string {
+	t.Helper()
+	return filepath.Join(append([]string{"testdata"}, parts...)...)
+}
 
 func TestInterfaceSpecEqual(t *testing.T) {
 	tests := []struct {
@@ -228,7 +233,6 @@ require golang.org/x/mod v0.22.0
 }
 
 func TestCanonicalRegistry(t *testing.T) {
-	// Every canonical entry must have a valid import path
 	for name, cr := range canonicalRegistry {
 		if cr.ImportPath == "" {
 			t.Errorf("%s: empty import path", name)
@@ -238,27 +242,25 @@ func TestCanonicalRegistry(t *testing.T) {
 		}
 	}
 
-	// Common interfaces must exist
-	for _, name := range []string{"MediaAdminService", "Downloader", "Indexer", "NotificationProvider"} {
+	for _, name := range []string{
+		"MediaAdminServiceServer",
+		"DownloaderServiceServer",
+		"IndexerServiceServer",
+		"NotificationServiceServer",
+	} {
 		if cr := Canonical(name); cr == nil {
 			t.Errorf("Canonical(%q) returned nil — interface must be registered", name)
 		}
 	}
 }
 
-func TestParseDir_MediaAdminContracts(t *testing.T) {
-	// Test parsing the actual contracts-media-admin repo
-	repoDir := "/opt/repos/contracts-media-admin"
-	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
-		t.Skip("contracts-media-admin not cloned — skipping integration test")
-	}
-
+func TestParseDir_MediaAdminTestdata(t *testing.T) {
+	repoDir := testdataPath(t, "media-admin")
 	specs, err := ParseDir(repoDir)
 	if err != nil {
 		t.Fatalf("ParseDir(%s): %v", repoDir, err)
 	}
 
-	// contracts-media-admin should have MediaAdminServiceServer
 	found := false
 	for _, s := range specs {
 		if s.Name == "MediaAdminServiceServer" {
@@ -273,16 +275,12 @@ func TestParseDir_MediaAdminContracts(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("MediaAdminServiceServer interface not found in contracts-media-admin")
+		t.Error("MediaAdminServiceServer interface not found in testdata/media-admin")
 	}
 }
 
-func TestParseDir_ContentContracts(t *testing.T) {
-	repoDir := "/opt/repos/contracts-content"
-	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
-		t.Skip("contracts-content not cloned — skipping integration test")
-	}
-
+func TestParseDir_DownloaderTestdata(t *testing.T) {
+	repoDir := testdataPath(t, "downloader")
 	specs, err := ParseDir(repoDir)
 	if err != nil {
 		t.Fatalf("ParseDir(%s): %v", repoDir, err)
@@ -290,19 +288,19 @@ func TestParseDir_ContentContracts(t *testing.T) {
 
 	found := false
 	for _, s := range specs {
-		if s.Name == "SupplementaryContentProvider" {
+		if s.Name == "DownloaderServiceServer" {
 			found = true
-			t.Logf("SupplementaryContentProvider methods: %d", len(s.Methods))
+			t.Logf("DownloaderServiceServer methods: %d", len(s.Methods))
 		}
 	}
 	if !found {
-		t.Error("SupplementaryContentProvider interface not found in contracts-content")
+		t.Error("DownloaderServiceServer interface not found in testdata/downloader")
 	}
 }
 
 func TestDryRun(t *testing.T) {
-	report, err := DryRun([]Declaration{
-		{Repo: "github.com/Muxcore-Media/contracts-media-admin", Version: "v0.1.0", Interface: "MediaAdminService"},
+	report, err := DryRun(nil, []Declaration{
+		{Repo: "github.com/Muxcore-Media/contracts-media-admin", Version: "v0.1.0", Interface: "MediaAdminServiceServer"},
 	})
 	if err != nil {
 		t.Fatalf("DryRun: %v", err)
@@ -322,6 +320,19 @@ func TestReplaceDirectiveString(t *testing.T) {
 	want := "github.com/thirdparty/contracts-media-admin => github.com/Muxcore-Media/contracts-media-admin v0.1.0"
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestReplaceDirectiveModEditArg(t *testing.T) {
+	d := ReplaceDirective{
+		OldPath: "github.com/thirdparty/contracts-media-admin",
+		NewPath: "github.com/Muxcore-Media/contracts-media-admin",
+		Version: "v0.1.0",
+	}
+	got := d.ModEditArg()
+	want := "github.com/thirdparty/contracts-media-admin=github.com/Muxcore-Media/contracts-media-admin@v0.1.0"
+	if got != want {
+		t.Errorf("ModEditArg() = %q, want %q", got, want)
 	}
 }
 
@@ -355,7 +366,7 @@ func TestResolve_AlreadyCanonical(t *testing.T) {
 	directive, err := r.Resolve(Declaration{
 		Repo:      "github.com/Muxcore-Media/contracts-media-admin",
 		Version:   "v0.1.0",
-		Interface: "MediaAdminService",
+		Interface: "MediaAdminServiceServer",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -377,6 +388,18 @@ func TestResolve_UnknownInterface(t *testing.T) {
 	}
 	if directive != nil {
 		t.Errorf("expected nil directive for unknown interface, got %+v", directive)
+	}
+}
+
+func TestResolve_RejectsUnsafeImportPath(t *testing.T) {
+	r := &Resolver{}
+	_, err := r.Resolve(Declaration{
+		Repo:      "file:///etc/passwd",
+		Version:   "v1.0.0",
+		Interface: "DownloaderServiceServer",
+	})
+	if err == nil {
+		t.Fatal("expected error for file:// import path")
 	}
 }
 
@@ -410,6 +433,39 @@ func TestApplyReplaceDirectives_NoGoMod(t *testing.T) {
 	}
 }
 
+func TestApplyReplaceDirectives_Success(t *testing.T) {
+	dir := t.TempDir()
+	mod := `module example.com/test
+
+go 1.23
+
+require github.com/thirdparty/contracts-downloader v0.1.0
+`
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ApplyReplaceDirectives(dir, []ReplaceDirective{
+		{
+			OldPath: "github.com/thirdparty/contracts-downloader",
+			NewPath: "github.com/Muxcore-Media/contracts-downloader",
+			Version: "v1.2.0",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyReplaceDirectives: %v", err)
+	}
+
+	updated, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(updated)
+	if !strings.Contains(body, "replace github.com/thirdparty/contracts-downloader => github.com/Muxcore-Media/contracts-downloader v1.2.0") {
+		t.Errorf("replace not applied, go.mod:\n%s", body)
+	}
+}
+
 func TestMethodSig(t *testing.T) {
 	m := MethodSpec{
 		Name:    "Get",
@@ -428,9 +484,30 @@ func TestRegisteredCanonicals(t *testing.T) {
 	if len(reg) == 0 {
 		t.Error("canonical registry is empty")
 	}
-	// Should have at least the 17 contract repos worth of interfaces
 	if len(reg) < 15 {
 		t.Errorf("expected at least 15 canonical entries, got %d", len(reg))
 	}
 	t.Logf("Registered %d canonical contracts", len(reg))
+}
+
+func TestValidateImportPath(t *testing.T) {
+	tests := []struct {
+		path    string
+		wantErr bool
+	}{
+		{"github.com/Muxcore-Media/contracts-downloader", false},
+		{"file:///tmp/evil", true},
+		{"../escape", true},
+		{"/absolute/path", true},
+		{"evil.com/org/repo", true},
+	}
+	for _, tt := range tests {
+		err := validateImportPath(tt.path, defaultAllowedHosts)
+		if tt.wantErr && err == nil {
+			t.Errorf("validateImportPath(%q) expected error", tt.path)
+		}
+		if !tt.wantErr && err != nil {
+			t.Errorf("validateImportPath(%q) unexpected error: %v", tt.path, err)
+		}
+	}
 }

@@ -1,138 +1,128 @@
 package reconciler
 
 // canonicalRegistry maps MuxCore interface names to their canonical Go module
-// import paths. This is the authoritative list maintained alongside the
-// contracts-* repos in github.com/Muxcore-Media.
-//
-// When a third-party module declares a contract from a non-canonical repo,
-// the reconciler looks up the interface name here to find the canonical
-// equivalent for structural comparison.
-//
-// Interface names must be unique across all contract repos. If two contract
-// repos define different interfaces with the same name, one must be renamed.
+// import paths. Published entries are reconcilable; reserved entries are known
+// contract surfaces that are not yet published or have no Server interface.
 var canonicalRegistry = map[string]CanonicalRepo{
 	// contracts-media-admin (published)
-	"MediaAdminService": {
+	"MediaAdminServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-media-admin",
 		Version:    "v0.1.0",
 	},
 
 	// contracts-downloader (published)
-	"Downloader": {
-		ImportPath: "github.com/Muxcore-Media/contracts-downloader",
-		Version:    "v0.1.0",
-	},
-	"DownloaderService": {
+	"DownloaderServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-downloader",
 		Version:    "v0.1.0",
 	},
 
 	// contracts-indexer (published)
-	"Indexer": {
+	"IndexerServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-indexer",
 		Version:    "v0.1.0",
 	},
 
 	// contracts-notification (published)
-	"NotificationProvider": {
+	"NotificationServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-notification",
 		Version:    "v0.1.0",
 	},
 
-	// Reserved — repos not published yet (see core.wiki/Spool-and-Marketplace.md)
-
-	// contracts-playback
-	"Playback": {
-		ImportPath: "github.com/Muxcore-Media/contracts-playback",
-		Version:    "v1.0.0",
-	},
-
-	// contracts-transcoder
-	"Transcoder": {
-		ImportPath: "github.com/Muxcore-Media/contracts-transcoder",
-		Version:    "v1.0.0",
-	},
-
-	// contracts-metadata
-	"MetadataProvider": {
+	// contracts-metadata (published)
+	"MetadataServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-metadata",
 		Version:    "v0.1.0",
 	},
 
-	// contracts-scanner
-	"ScannerService": {
+	// contracts-scanner (published)
+	"ScannerServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-scanner",
 		Version:    "v0.1.0",
 	},
 
-	// contracts-automation
-	"AutomationService": {
+	// contracts-automation (published)
+	"AutomationServiceServer": {
 		ImportPath: "github.com/Muxcore-Media/contracts-automation",
 		Version:    "v0.1.0",
 	},
 
-	// contracts-artwork
+	// Reserved — repos not published or events-only (Resolve returns nil)
+
+	"Playback": {
+		ImportPath: "github.com/Muxcore-Media/contracts-playback",
+		Version:    "v1.0.0",
+		Reserved:   true,
+	},
+
+	"Transcoder": {
+		ImportPath: "github.com/Muxcore-Media/contracts-transcoder",
+		Version:    "v1.0.0",
+		Reserved:   true,
+	},
+
 	"ArtworkProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-artwork",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-content
 	"SupplementaryContentProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-content",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-discovery
 	"MediaDiscovery": {
 		ImportPath: "github.com/Muxcore-Media/contracts-discovery",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-quality
 	"ReleaseDecider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-quality",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 	"FormatMatcher": {
 		ImportPath: "github.com/Muxcore-Media/contracts-quality",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-mediainfo
 	"MediaInfoProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-mediainfo",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-resolver
 	"MediaResolver": {
 		ImportPath: "github.com/Muxcore-Media/contracts-resolver",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-importlist
 	"ImportListProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-importlist",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-tag
 	"TagProvider": {
 		ImportPath: "github.com/Muxcore-Media/contracts-tag",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-workflow
 	"WorkflowEngine": {
 		ImportPath: "github.com/Muxcore-Media/contracts-workflow",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 
-	// contracts-filewatcher
 	"FileWatcher": {
 		ImportPath: "github.com/Muxcore-Media/contracts-filewatcher",
 		Version:    "v1.0.0",
+		Reserved:   true,
 	},
 }
 

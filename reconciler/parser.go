@@ -5,13 +5,53 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-// ParseDir parses all .go files in a directory and extracts exported interface
-// definitions. Non-Go files and test files are skipped.
+// ParseDir walks dir and all subdirectories, parsing every Go package found,
+// and returns exported interface definitions from the entire tree.
 func ParseDir(dir string) ([]InterfaceSpec, error) {
+	var specs []InterfaceSpec
+	found := false
+
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if d.Name() == ".git" || d.Name() == "vendor" {
+			return filepath.SkipDir
+		}
+
+		pkgSpecs, err := parsePackageDir(path)
+		if err != nil {
+			if strings.Contains(err.Error(), "no Go packages") {
+				return nil
+			}
+			return err
+		}
+		if len(pkgSpecs) > 0 {
+			found = true
+			specs = append(specs, pkgSpecs...)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk %s: %w", dir, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no Go packages found in %s", dir)
+	}
+	return specs, nil
+}
+
+// parsePackageDir parses a single directory as one Go package.
+func parsePackageDir(dir string) ([]InterfaceSpec, error) {
 	fset := token.NewFileSet()
 	//nolint:staticcheck // ParseDir is enough for structural interface extraction without build tags.
 	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
@@ -20,22 +60,16 @@ func ParseDir(dir string) ([]InterfaceSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", dir, err)
 	}
-
 	if len(pkgs) == 0 {
-		return nil, fmt.Errorf("no Go packages found in %s", dir)
+		return nil, fmt.Errorf("no Go packages in %s", dir)
 	}
 
-	// Use the first package found (there should only be one package per dir)
-	var pkg *ast.Package //nolint:staticcheck // structural parsing only; no type checking required
-	for _, p := range pkgs {
-		pkg = p
-		break
-	}
-
-	pkgPath := pkg.Name // just the local package name
 	var specs []InterfaceSpec
-	for _, file := range pkg.Files {
-		specs = append(specs, extractInterfaces(file, pkgPath)...)
+	for _, pkg := range pkgs {
+		pkgPath := pkg.Name
+		for _, file := range pkg.Files {
+			specs = append(specs, extractInterfaces(file, pkgPath)...)
+		}
 	}
 	return specs, nil
 }
@@ -48,7 +82,6 @@ func ParseFile(filePath string) ([]InterfaceSpec, error) {
 		return nil, fmt.Errorf("parse %s: %w", filePath, err)
 	}
 
-	// Package import path from the file's package declaration
 	pkgPath := file.Name.Name
 	return extractInterfaces(file, pkgPath), nil
 }
@@ -63,7 +96,7 @@ func FindInterface(specs []InterfaceSpec, name string) (*InterfaceSpec, error) {
 	return nil, fmt.Errorf("interface %q not found", name)
 }
 
-// findInterfaceByName searches a parsed directory for a specific interface.
+// findInterfaceByName searches a parsed directory tree for a specific interface.
 func findInterfaceByName(dir, name string) (*InterfaceSpec, error) {
 	specs, err := ParseDir(dir)
 	if err != nil {
@@ -106,10 +139,7 @@ func extractInterfaces(file *ast.File, pkgPath string) []InterfaceSpec {
 }
 
 func extractMethod(field *ast.Field) []MethodSpec {
-	// Embedded interface — type is an ident or selector with no names
 	if len(field.Names) == 0 {
-		// Embedded interfaces are not expanded — we skip them for structural
-		// comparison. Only explicit methods are compared.
 		return nil
 	}
 
@@ -140,7 +170,6 @@ func extractFieldList(fieldList *ast.FieldList) []TypeSpec {
 	var types []TypeSpec
 	for _, field := range fieldList.List {
 		ts := extractType(field.Type)
-		// If there are multiple names for the same type, add one entry per name
 		if len(field.Names) == 0 {
 			types = append(types, ts)
 		} else {
@@ -152,28 +181,15 @@ func extractFieldList(fieldList *ast.FieldList) []TypeSpec {
 	return types
 }
 
-func extractType(expr ast.Expr) TypeSpec { //nolint:gocyclo // AST type shapes require exhaustive switch coverage
+func extractType(expr ast.Expr) TypeSpec {
 	switch t := expr.(type) {
 	case *ast.Ident:
-		if t.Name == "error" || t.Name == "bool" || t.Name == "string" ||
-			t.Name == "int" || t.Name == "int8" || t.Name == "int16" ||
-			t.Name == "int32" || t.Name == "int64" ||
-			t.Name == "uint" || t.Name == "uint8" || t.Name == "uint16" ||
-			t.Name == "uint32" || t.Name == "uint64" ||
-			t.Name == "float32" || t.Name == "float64" ||
-			t.Name == "complex64" || t.Name == "complex128" ||
-			t.Name == "byte" || t.Name == "rune" ||
-			t.Name == "uintptr" || t.Name == "any" {
-			return TypeSpec{Kind: "ident", Name: t.Name}
-		}
 		return TypeSpec{Kind: "ident", Name: t.Name}
 
 	case *ast.SelectorExpr:
 		return TypeSpec{
-			Kind: "selector",
-			Name: t.Sel.Name,
-			// ImportPath is resolved from imports — for structural equality we
-			// don't need it, but it's useful for debugging
+			Kind:       "selector",
+			Name:       t.Sel.Name,
 			ImportPath: resolveImportPath(t),
 		}
 
@@ -195,15 +211,10 @@ func extractType(expr ast.Expr) TypeSpec { //nolint:gocyclo // AST type shapes r
 		return TypeSpec{Kind: "map", Key: &key, Elem: &elem}
 
 	case *ast.InterfaceType:
-		// For method-based interfaces used as parameter/return types,
-		// just mark it as interface{} — method set comparison happens at
-		// the top-level InterfaceSpec level
 		if t.Methods == nil || len(t.Methods.List) == 0 {
 			return TypeSpec{Kind: "interface"}
 		}
-		// Non-empty interface used inline — extract method set
-		ts := TypeSpec{Kind: "interface"}
-		return ts
+		return TypeSpec{Kind: "interface"}
 
 	case *ast.FuncType:
 		ts := TypeSpec{Kind: "func"}
@@ -231,19 +242,13 @@ func extractType(expr ast.Expr) TypeSpec { //nolint:gocyclo // AST type shapes r
 	}
 }
 
-// resolveImportPath attempts to reconstruct the full import path from a
-// selector expression by walking the file's imports. Returns empty string
-// if it can't be determined (which is fine — structural comparison ignores it).
 func resolveImportPath(_ *ast.SelectorExpr) string {
-	// Full import path resolution requires walking the file's import block.
-	// We don't need it for structural comparison — the type name alone is
-	// sufficient since we compare method signatures, not package origins.
 	return ""
 }
 
-// CloneAndParse clones a git repo to a temp directory, parses its Go source,
-// and returns the extracted interface specs. The caller is responsible for
-// cleanup via the returned cleanup function.
+// CloneAndParse clones a git repo to a temp directory, parses its Go source tree,
+// and returns the extracted interface specs. The caller is responsible for cleanup
+// via the returned cleanup function.
 func CloneAndParse(repoURL, version string) ([]InterfaceSpec, func(), error) {
 	dir, err := os.MkdirTemp("", "contracts-reconciler-*")
 	if err != nil {
@@ -252,19 +257,7 @@ func CloneAndParse(repoURL, version string) ([]InterfaceSpec, func(), error) {
 
 	cleanup := func() { _ = os.RemoveAll(dir) }
 
-	// Build the clone URL with the version tag
-	cloneURL := repoURL
-	if !strings.HasSuffix(cloneURL, ".git") {
-		cloneURL += ".git"
-	}
-
-	// For GitHub URLs, convert to clone URL
-	if strings.HasPrefix(cloneURL, "https://github.com/") && !strings.Contains(cloneURL, ".git") {
-		cloneURL += ".git"
-	}
-
-	// Clone the repo
-	if cloneErr := cloneRepo(cloneURL, version, dir); cloneErr != nil {
+	if cloneErr := gitCloneBranch(repoURL, version, dir); cloneErr != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("clone %s: %w", repoURL, cloneErr)
 	}
@@ -276,15 +269,6 @@ func CloneAndParse(repoURL, version string) ([]InterfaceSpec, func(), error) {
 	}
 
 	return specs, cleanup, nil
-}
-
-func cloneRepo(url, version, destDir string) error {
-	// Simple approach: git clone --depth 1 --branch <version> <url> <dest>
-	// For a real implementation, this would shell out to git.
-	// The caller (spool CLI, marketplace module) provides the actual clone mechanism.
-	// This function is a placeholder that expects the files to already be on disk
-	// at destDir.
-	return fmt.Errorf("not implemented: use CloneRepo from the spool CLI")
 }
 
 // ParseGoModFile parses a go.mod file and returns all require directives.
